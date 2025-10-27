@@ -59,6 +59,12 @@ Steamify leverages **Algorand’s Pure Proof-of-Stake (PPoS)** protocol to deliv
 - Worker verifies balance on [AlgoExplorer TestNet](https://testnet.algoexplorer.io/)
 - Continuous updates via backend polling and micro-payments
 
+  <img width="1919" height="967" alt="image" src="https://github.com/user-attachments/assets/22de3c17-cb7a-472e-ae97-f2b2f6894deb" />
+
+  <img width="1889" height="1079" alt="image" src="https://github.com/user-attachments/assets/cb6c2c9e-6ab0-4df2-bec7-a34ba229c099" />
+
+
+
 #### Phase 5: Contract Termination
 - Employer deletes contract, recovering remaining ALGO and ASA
 
