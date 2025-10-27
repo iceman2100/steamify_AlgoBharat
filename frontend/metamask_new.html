@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamFi - MetaMask Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">StreamFi</h1>
+            <p class="text-gray-400">Real-time Crypto Streaming with MetaMask</p>
+        </header>
+
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-semibold" id="wallet-status">Wallet not connected</h2>
+                    <p class="text-sm text-gray-400" id="network-status">Please connect your MetaMask wallet</p>
+                </div>
+                <div class="space-x-4">
+                    <button id="connect-wallet" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                        Connect MetaMask
+                    </button>
+                    <button id="mint-tokens" onclick="mintTestTokens()" style="display:none" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">
+                        Get Test Tokens
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-4">Start New Stream</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Recipient Address</label>
+                    <input type="text" id="recipient-address" 
+                           class="w-full bg-gray-700 rounded p-2 text-white" 
+                           placeholder="0x...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Rate (tokens per second)</label>
+                    <input type="number" id="stream-rate" 
+                           class="w-full bg-gray-700 rounded p-2 text-white" 
+                           placeholder="0.1">
+                </div>
+                <button onclick="startNewStream()" 
+                        class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg w-full">
+                    Start Stream
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-4">Your Stream</h2>
+            <div id="active-stream" class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="text-gray-400">Current Balance</p>
+                        <p id="token-balance" class="text-2xl font-bold">Loading...</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400">Stream Rate</p>
+                        <p id="stream-rate-display" class="text-2xl font-bold">Loading...</p>
+                    </div>
+                </div>
+                <div class="flex space-x-4">
+                    <button onclick="claimStream()" 
+                            class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex-1">
+                        Claim Tokens
+                    </button>
+                    <button onclick="pauseStream()" 
+                            class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg flex-1">
+                        Pause Stream
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="stream-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Stream cards will be added here -->
+        </div>
+    </div>
+
+    <script>
+        // Contract addresses and ABIs
+        const STREAM_FI_ADDRESS = '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE';
+        const TOKEN_ADDRESS = '0x68B1D87F95878fE05B998F19b66F4baba5De1aed';
+        const STREAM_FI_ABI = [
+            "function startStream(address _recipient, uint256 _ratePerSecond) external",
+            "function streams(address) view returns (address sender, address recipient, uint256 startTime, uint256 ratePerSecond, uint256 lastClaimTime, bool isActive)",
+            "function claimStream() external",
+            "function pauseStream(address _recipient) external"
+        ];
+        const TOKEN_ABI = [
+            "function balanceOf(address) view returns (uint256)",
+            "function approve(address spender, uint256 amount) external returns (bool)",
+            "function mint(address to, uint256 amount) external"
+        ];
+
+        // Global variables
+        let provider = null;
+        let signer = null;
+        let streamFiContract = null;
+        let tokenContract = null;
+        let tokenContract = null;
+        let currentAccount = null;
+
+        async function connectWallet() {
+            try {
+                console.log('Connecting to MetaMask...');
+                
+                // Request account access
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                currentAccount = accounts[0];
+                console.log('Connected to account:', currentAccount);
+
+                // Create provider and signer
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+
+                // Initialize contracts
+                streamFiContract = new ethers.Contract(STREAM_FI_ADDRESS, STREAM_FI_ABI, signer);
+                tokenContract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+
+                // Switch to Sepolia if needed
+                const network = await provider.getNetwork();
+                if (network.chainId !== 11155111) {
+                    await switchToSepolia();
+                }
+
+                // Update UI
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+                document.getElementById('network-status').textContent = 'Network: Sepolia Testnet';
+                
+                // Display ETH balance
+                const balance = await provider.getBalance(currentAccount);
+                const ethBalance = ethers.utils.formatEther(balance);
+                document.getElementById('network-status').textContent = `Network: Sepolia Testnet (${ethBalance} ETH)`;
+                document.getElementById('connect-wallet').textContent = 'Connected';
+                document.getElementById('connect-wallet').disabled = true;
+
+                console.log('Wallet connected successfully');
+            } catch (error) {
+                console.error('Error connecting to MetaMask:', error);
+                alert('Failed to connect: ' + error.message);
+            }
+        }
+
+        async function switchToSepolia() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0xaa36a7' }], // 11155111 in hex
+                });
+            } catch (error) {
+                if (error.code === 4902) {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: '0xaa36a7',
+                            chainName: 'Sepolia Testnet',
+                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                            rpcUrls: ['https://sepolia.infura.io/v3/a85f2c76df734dfaaad5516c2cf513a4'],
+                            blockExplorerUrls: ['https://sepolia.etherscan.io']
+                        }]
+                    });
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                currentAccount = null;
+                document.getElementById('wallet-status').textContent = 'Wallet not connected';
+                document.getElementById('network-status').textContent = 'Please connect your MetaMask wallet';
+                document.getElementById('connect-wallet').textContent = 'Connect MetaMask';
+                document.getElementById('connect-wallet').disabled = false;
+            } else if (accounts[0] !== currentAccount) {
+                currentAccount = accounts[0];
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+            }
+        }
+
+        // Start a new stream
+        async function startNewStream() {
+            try {
+                if (!currentAccount) {
+                    alert('Please connect your wallet first!');
+                    return;
+                }
+
+                const recipient = document.getElementById('recipient-address').value;
+                const rate = document.getElementById('stream-rate').value;
+
+                if (!ethers.utils.isAddress(recipient)) {
+                    alert('Please enter a valid Ethereum address!');
+                    return;
+                }
+
+                if (rate <= 0) {
+                    alert('Please enter a valid rate!');
+                    return;
+                }
+
+                // Convert rate to wei
+                const rateInWei = ethers.utils.parseEther(rate.toString());
+
+                // First approve tokens
+                const approveTx = await tokenContract.approve(STREAM_FI_ADDRESS, ethers.constants.MaxUint256);
+                await approveTx.wait();
+                console.log('Token approval confirmed');
+
+                // Start stream
+                const tx = await streamFiContract.startStream(recipient, rateInWei);
+                await tx.wait();
+                console.log('Stream started successfully');
+                
+                alert('Stream started successfully!');
+                updateStreamInfo();
+            } catch (error) {
+                console.error('Error starting stream:', error);
+                alert('Error starting stream: ' + error.message);
+            }
+        }
+
+        // Claim stream tokens
+        async function claimStream() {
+            try {
+                if (!currentAccount) {
+                    alert('Please connect your wallet first!');
+                    return;
+                }
+
+                const tx = await streamFiContract.claimStream();
+                await tx.wait();
+                console.log('Tokens claimed successfully');
+                
+                alert('Tokens claimed successfully!');
+                updateStreamInfo();
+            } catch (error) {
+                console.error('Error claiming tokens:', error);
+                alert('Error claiming tokens: ' + error.message);
+            }
+        }
+
+        // Pause the stream
+        async function pauseStream() {
+            try {
+                if (!currentAccount) {
+                    alert('Please connect your wallet first!');
+                    return;
+                }
+
+                const tx = await streamFiContract.pauseStream(currentAccount);
+                await tx.wait();
+                console.log('Stream paused successfully');
+                
+                alert('Stream paused successfully!');
+                updateStreamInfo();
+            } catch (error) {
+                console.error('Error pausing stream:', error);
+                alert('Error pausing stream: ' + error.message);
+            }
+        }
+
+        // Update stream information
+        async function updateStreamInfo() {
+            try {
+                if (!currentAccount || !streamFiContract || !tokenContract) return;
+
+                // Get token balance
+                const balance = await tokenContract.balanceOf(currentAccount);
+                document.getElementById('token-balance').textContent = 
+                    ethers.utils.formatEther(balance) + ' SFT';
+
+                // Get stream info
+                const stream = await streamFiContract.streams(currentAccount);
+                const ratePerSecond = ethers.utils.formatEther(stream.ratePerSecond);
+                document.getElementById('stream-rate-display').textContent = 
+                    ratePerSecond + ' SFT/sec';
+
+            } catch (error) {
+                console.error('Error updating stream info:', error);
+            }
+        }
+
+        // Set up event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, setting up event listeners...');
+            const connectButton = document.getElementById('connect-wallet');
+            connectButton.onclick = async () => {
+                await connectWallet();
+                if (currentAccount) {
+                    updateStreamInfo();
+                }
+            };
+            
+            // MetaMask event listeners
+            if (window.ethereum) {
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                window.ethereum.on('chainChanged', () => window.location.reload());
+                
+                // Check if already connected
+                if (window.ethereum.selectedAddress) {
+                    connectWallet().then(() => {
+                        updateStreamInfo();
+                    });
+                }
+            } else {
+                console.log('MetaMask not installed');
+                connectButton.textContent = 'Install MetaMask';
+                connectButton.onclick = () => window.open('https://metamask.io/download/', '_blank');
+            }
+
+            // Update stream info every 5 seconds
+            
+        });
+
+        // Function to mint test tokens
+        async function mintTestTokens() {
+            try {
+                if (!currentAccount || !tokenContract) {
+                    alert('Please connect your wallet first!');
+                    return;
+                }
+
+                const amount = ethers.utils.parseEther('1000'); // Mint 1000 test tokens
+                const tx = await tokenContract.mint(currentAccount, amount);
+                await tx.wait();
+
+                // Update balance display
+                const balance = await tokenContract.balanceOf(currentAccount);
+                document.getElementById('token-balance').textContent = 
+                    ethers.utils.formatEther(balance) + ' SFT';
+
+                alert('Successfully minted 1000 test tokens!');
+            } catch (error) {
+                console.error('Error minting tokens:', error);
+                alert('Error minting tokens: ' + error.message);
+            }
+        }
+            setInterval(updateStreamInfo, 5000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamFi - MetaMask Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        let provider, signer, streamFiContract, tokenContract;
+        let currentAccount = null;
+        
+        // Contract addresses (Sepolia testnet)
+        const STREAM_FI_ADDRESS = '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE';
+        const TOKEN_ADDRESS = '0x68B1D87F95878fE05B998F19b66F4baba5De1aed';
+
+        // Contract ABIs
+        const STREAM_FI_ABI = [
+            "function startStream(address _recipient, uint256 _ratePerSecond) external",
+            "function streams(address) view returns (address sender, address recipient, uint256 startTime, uint256 ratePerSecond, uint256 lastClaimTime, bool isActive)",
+            "function claimStream() external",
+            "function pauseStream(address _recipient) external"
+        ];
+
+        const TOKEN_ABI = [
+            "function balanceOf(address) view returns (uint256)",
+            "function approve(address spender, uint256 amount) external returns (bool)"
+        ];
+
+        async function connectWallet() {
+            try {
+                // Check if MetaMask is installed
+                if (typeof window.ethereum === 'undefined') {
+                    alert('Please install MetaMask!');
+                    return;
+                }
+
+                console.log('Connecting to MetaMask...');
+                
+                // Request account access
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                currentAccount = accounts[0];
+                console.log('Connected to account:', currentAccount);
+
+                // Create provider and signer
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+
+                // Initialize contracts
+                streamFiContract = new ethers.Contract(STREAM_FI_ADDRESS, STREAM_FI_ABI, signer);
+                tokenContract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+
+                // Switch to Sepolia if needed
+                const network = await provider.getNetwork();
+                if (network.chainId !== 11155111) {
+                    await switchToSepolia();
+                }
+
+                // Update UI
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+                document.getElementById('network-status').textContent = 'Network: Sepolia Testnet';
+                document.getElementById('connect-wallet').textContent = 'Connected';
+                document.getElementById('connect-wallet').disabled = true;
+
+                // Set up event listeners for MetaMask
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                window.ethereum.on('chainChanged', () => window.location.reload());
+
+            } catch (error) {
+                console.error('Error connecting to MetaMask:', error);
+                alert('Failed to connect: ' + error.message);
+            }
+        }
+
+        async function switchToSepolia() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0xaa36a7' }], // 11155111 in hex
+                });
+            } catch (error) {
+                if (error.code === 4902) {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: '0xaa36a7',
+                            chainName: 'Sepolia Testnet',
+                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                            rpcUrls: ['https://sepolia.infura.io/v3/a85f2c76df734dfaaad5516c2cf513a4'],
+                            blockExplorerUrls: ['https://sepolia.etherscan.io']
+                        }]
+                    });
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                currentAccount = null;
+                document.getElementById('wallet-status').textContent = 'Wallet not connected';
+                document.getElementById('network-status').textContent = 'Please connect your MetaMask wallet';
+                document.getElementById('connect-wallet').textContent = 'Connect MetaMask';
+                document.getElementById('connect-wallet').disabled = false;
+            } else if (accounts[0] !== currentAccount) {
+                currentAccount = accounts[0];
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+            }
+        }
+
+        // Set up connect button when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const connectButton = document.getElementById('connect-wallet');
+            connectButton.onclick = connectWallet;
+            
+            // Check if already connected
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                connectWallet();
+            }
+        });
+    </script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">StreamFi</h1>
+            <p class="text-gray-400">Real-time Crypto Streaming with MetaMask</p>
+        </header>
+
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-semibold" id="wallet-status">Wallet not connected</h2>
+                    <p class="text-sm text-gray-400" id="network-status">Please connect your MetaMask wallet</p>
+                </div>
+                <button id="connect-wallet" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                    Connect MetaMask
+                </button>
+            </div>
+        </div>
+
+        <div id="stream-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Stream cards will be added here -->
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Contract addresses (Sepolia testnet)
+        const STREAM_FI_ADDRESS = '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE';
+        const TOKEN_ADDRESS = '0x68B1D87F95878fE05B998F19b66F4baba5De1aed';
+
+        // Contract ABIs
+        const STREAM_FI_ABI = [
+            "function startStream(address _recipient, uint256 _ratePerSecond) external",
+            "function streams(address) view returns (address sender, address recipient, uint256 startTime, uint256 ratePerSecond, uint256 lastClaimTime, bool isActive)",
+            "function claimStream() external",
+            "function pauseStream(address _recipient) external"
+        ];
+
+        const TOKEN_ABI = [
+            "function balanceOf(address) view returns (uint256)",
+            "function approve(address spender, uint256 amount) external returns (bool)"
+        ];
+
+        let provider, signer, streamFiContract, tokenContract;
+        let currentAccount = null;
+
+        // Initialize Web3 and contracts
+        async function initializeWeb3() {
+            try {
+                console.log('Initializing Web3...');
+                
+                // Request account access
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                currentAccount = accounts[0];
+                console.log('Connected account:', currentAccount);
+
+                // Create provider and signer
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+
+                // Initialize contracts
+                streamFiContract = new ethers.Contract(STREAM_FI_ADDRESS, STREAM_FI_ABI, signer);
+                tokenContract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+
+                // Switch to Sepolia if needed
+                const network = await provider.getNetwork();
+                if (network.chainId !== 11155111) {
+                    await switchToSepolia();
+                }
+
+                // Update UI
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+                document.getElementById('network-status').textContent = 'Network: Sepolia Testnet';
+                document.getElementById('connect-wallet').textContent = 'Connected';
+
+                // Set up event listeners
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                window.ethereum.on('chainChanged', () => window.location.reload());
+
+                return true;
+            } catch (error) {
+                console.error('Error initializing Web3:', error);
+                alert('Failed to connect to MetaMask: ' + error.message);
+                return false;
+            }
+        }
+
+        // Switch to Sepolia network
+        async function switchToSepolia() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0xaa36a7' }], // 11155111 in hex
+                });
+            } catch (error) {
+                if (error.code === 4902) {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: '0xaa36a7',
+                            chainName: 'Sepolia Testnet',
+                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                            rpcUrls: ['https://sepolia.infura.io/v3/a85f2c76df734dfaaad5516c2cf513a4'],
+                            blockExplorerUrls: ['https://sepolia.etherscan.io']
+                        }]
+                    });
+                }
+            }
+        }
+
+        // Handle account changes
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                currentAccount = null;
+                document.getElementById('wallet-status').textContent = 'Wallet not connected';
+                document.getElementById('network-status').textContent = 'Please connect your MetaMask wallet';
+                document.getElementById('connect-wallet').textContent = 'Connect MetaMask';
+            } else if (accounts[0] !== currentAccount) {
+                currentAccount = accounts[0];
+                document.getElementById('wallet-status').textContent = `Connected: ${currentAccount.substring(0, 6)}...${currentAccount.substring(38)}`;
+            }
+        }
+
+        // Start a new stream
+        async function startStream(recipient, ratePerSecond) {
+            try {
+                const tx = await streamFiContract.startStream(recipient, ethers.utils.parseEther(ratePerSecond.toString()));
+                const receipt = await tx.wait();
+                console.log('Stream started:', receipt);
+                alert('Stream started successfully!');
+            } catch (error) {
+                console.error('Error starting stream:', error);
+                alert('Failed to start stream: ' + error.message);
+            }
+        }
+
+        // Claim stream tokens
+        async function claimStream() {
+            try {
+                const tx = await streamFiContract.claimStream();
+                const receipt = await tx.wait();
+                console.log('Stream claimed:', receipt);
+                alert('Tokens claimed successfully!');
+            } catch (error) {
+                console.error('Error claiming stream:', error);
+                alert('Failed to claim tokens: ' + error.message);
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('connect-wallet').addEventListener('click', initializeWeb3);
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Check if MetaMask is installed
+                if (typeof window.ethereum !== 'undefined') {
+                    console.log('MetaMask is installed!');
+                    
+                    // Enable button
+                    const connectButton = document.getElementById('connect-wallet');
+                    connectButton.disabled = false;
+                    
+                    // Check if already connected
+                    if (window.ethereum.selectedAddress) {
+                        await initializeWeb3();
+                    }
+                } else {
+                    alert('Please install MetaMask to use this dApp!');
+                    document.getElementById('connect-wallet').textContent = 'Install MetaMask';
+                    document.getElementById('connect-wallet').onclick = () => {
+                        window.open('https://metamask.io/download/', '_blank');
+                    };
+                }
+            } catch (error) {
+                console.error('Initialization error:', error);
+                alert('Error initializing the application. Please refresh the page.');
+            }
+        });
+        });
+    </script>
+</body>
+</html>
